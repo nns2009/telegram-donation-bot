@@ -7,15 +7,26 @@ export type TransactionId = {
 };
 
 
-export async function last(tonClient: TonClient, address: Address): Promise<TonTransaction> {
+export async function lastOrNull(
+	tonClient: TonClient,
+	address: Address,
+): Promise<TonTransaction | null> {
 	const lastTransactions = await tonClient.getTransactions(address, { limit: 1 });
-	if (lastTransactions.length === 0)
-		throw new Error(`Can't get the last transaction because there are none at address: ${address.toFriendly()}`);
 	if (lastTransactions.length >= 2)
 		throw new Error(`Strange: expected to get 1 transaction as "last", received ${lastTransactions.length}`);
-	return lastTransactions[0];
+	return lastTransactions[0] ?? null;
 }
 
+export async function last(
+	tonClient: TonClient,
+	address: Address,
+): Promise<TonTransaction> {
+	const res = await lastOrNull(tonClient, address);
+	if (res == null)
+		throw new Error(`Can't get the last transaction because there are none at address: ${address.toFriendly()}`);
+
+	return res;
+}
 
 
 export async function getAllSince(

@@ -24,23 +24,42 @@ export type PaymentsUpdate = {
 export type PaymentReceivedCallback =
 	(paymentsUpdate: PaymentsUpdate) => void;
 
-	
+
 export const defaultTrackingState: TrackingState = {
 	lastProcessedLt: undefined,
 };
+
+export function trackingStateEqual(a: TrackingState, b: TrackingState): boolean {
+	return a.lastProcessedLt === b.lastProcessedLt;
+}
+
+export function makeTrackingState(lastProcessedLt: string): TrackingState {
+	return { lastProcessedLt };
+}
 
 export class PaymentProcessor {
 	tonClient: TonClient;
 	checkIntervalInSeconds: number;
 	chunkSize: number;
+	errorRetryDelay: number;
 
 	constructor(tonClient: TonClient, params: {
 		checkIntervalInSeconds?: number,
 		chunkSize?: number,
+		errorRetryDelay?: number,
 	}) {
 		this.tonClient = tonClient;
 		this.checkIntervalInSeconds = params.checkIntervalInSeconds ?? 20;
 		this.chunkSize = params.chunkSize ?? 25;
+		this.errorRetryDelay = params.errorRetryDelay ?? 60;
+	}
+
+	async currentTrackingStateOf(address: Address): Promise<TrackingState> {
+		const last = await Transaction.lastOrNull(this.tonClient, address);
+		if (last == null)
+			return defaultTrackingState;
+		else
+			return makeTrackingState(last.id.lt);
 	}
 
 	async newPaymentsTo(
@@ -61,8 +80,8 @@ export class PaymentProcessor {
 				continue;
 			if (tr.inMessage.source == null)
 				continue;
-			if (addressEqual(tr.inMessage.source, address))
-				continue;
+			// if (addressEqual(tr.inMessage.source, address))
+			// 	continue;
 
 			const body = tr.inMessage.body;
 			if (!body) // Empty messages without comment
@@ -91,11 +110,23 @@ export class PaymentProcessor {
 		callback: PaymentReceivedCallback,
 	): Promise<void> {
 		while (true) {
-			const paymentsUpdate = await this.newPaymentsTo(address, trackingState);
-			await callback(paymentsUpdate);
+			try {
+				const paymentsUpdate = await this.newPaymentsTo(address, trackingState);
 
-			trackingState = paymentsUpdate.nextTrackingState;
-			await sleep(this.checkIntervalInSeconds);
+				if (paymentsUpdate.payments.length > 0
+					|| !trackingStateEqual(
+						trackingState,
+						paymentsUpdate.nextTrackingState
+					)
+				) {
+					await callback(paymentsUpdate);
+				}
+	
+				trackingState = paymentsUpdate.nextTrackingState;
+				await sleep(this.checkIntervalInSeconds);
+			} catch (ex) {
+				await sleep(this.errorRetryDelay);
+			}
 		}
 	}
 }
