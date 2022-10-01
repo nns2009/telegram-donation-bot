@@ -1,0 +1,20 @@
+http://localhost:7000/currentTrackingStateOf?address=EQAa_d5RopvY6ZLcQFNJHFmdA8wf_igH-V-5Jc8DRprJIZa-
+
+
+http://localhost:7000/startPaymentTracking
+{
+	"address": "EQDeRjYJ81ZxYtJOuh7f8lS4Df-Hb_tednqVYWzQZ7QVNc7X",
+	"callbackUrl": "http://localhost:10000/test-callback",
+	"trackingState": {"lastProcessedLt":"4503345000003"}
+}
+
+
+http://localhost:7000/send
+{
+    "sourceKey": "54cdfa0c81c92a7ab8a1f39d3e937e96639a7d8c739a8e9ad985a3a2ab6df30bec3d135add9b925fbd995203717e92b141fda9ca921b958a5a6acab65afb1f51",
+    "destinationAddress": "EQAa_d5RopvY6ZLcQFNJHFmdA8wf_igH-V-5Jc8DRprJIZa-",
+    "amount": 300000000,
+    "message": "zhuk 30", // Optional
+    "senderPaysFees": false
+}
+
