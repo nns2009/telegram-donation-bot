@@ -5,11 +5,12 @@ import Koa from 'koa';
 import koaBody from 'koa-body';
 import Router from 'koa-router';
 
-import { Address, TonClient, Wallet, WalletContract } from "ton";
+import { Address, AllWalletContractTypes, TonClient, Wallet, WalletContract, WalletV3R2Source } from "ton";
 
 import { tonClient } from "./TONParameters.js";
 import { PaymentProcessor } from "../ton_payments/PaymentProcessor.js";
 import { retrierFactory, sleep } from './common.js';
+import { allTypes } from 'ton/dist/client/Wallet';
 
 
 const maxSendRetries = 3;
@@ -142,6 +143,7 @@ router.all('/send', koaBodyParser, async ctx => {
 	console.log(typeof ctx.request.body, ctx.request.body);
 	let {
 		sourceKey: sourceKeyString,
+		sourceAddress: sourceAddressString,
 		destinationAddress: destinationAddressString,
 		amount,
 		message,
@@ -153,14 +155,21 @@ router.all('/send', koaBodyParser, async ctx => {
 	const sourceKey = Buffer.from(sourceKeyString, 'hex');
 	console.log('sourceKey:', sourceKey);
 
-	const wallet = await retrier(
-		() => Wallet.findBestBySecretKey(tonClient, 0, sourceKey));
-	console.log('sourceAddress:', wallet.address);
+	if (!sourceAddressString)
+		throw new Error('Missing sourceAddressString');
+	const sourceAddress = Address.parse(sourceAddressString);
+	console.log('sourceAddress:', sourceAddress);
 
 	if (!destinationAddressString)
 		throw new Error('Missing destinationAddress');
 	const destinationAddress = Address.parse(destinationAddressString);
 	console.log('destinationAddress:', destinationAddress);
+
+	
+	// const wallet = Wallet.open(tonClient, sourceAddress);
+	const wallet = Wallet.openByType(tonClient, 0, sourceKey, 'org.ton.wallets.v3.r2');
+	// const wallet = await retrier(
+	// 	() => Wallet.findBestBySecretKey(tonClient, 0, sourceKey));
 
 	if (amount == undefined)
 		throw new Error('Missing amount');
