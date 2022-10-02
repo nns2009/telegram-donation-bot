@@ -1,0 +1,7 @@
+{
+  "host": "127.0.0.1",
+  "port": 8080,
+  "database": "tips.db",
+  "bot_token": "API_TOKEN_HERE",
+  "ton_gateway": "http://127.0.0.1:7000"
+}

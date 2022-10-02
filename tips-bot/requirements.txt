@@ -1,0 +1,5 @@
+aiohttp~=3.8.3
+peewee~=3.15.3
+peewee-async~=0.8.0
+aiosqlite~=0.17.0
+python-telegram-bot-raw~=20.0a4
