@@ -1,5 +1,4 @@
 import base64
-import decimal
 import struct
 from datetime import datetime, timezone
 from decimal import Decimal
@@ -10,30 +9,15 @@ import bot
 import entities as e
 import gateway
 
-FEE = Decimal('0.01')
-MIN_AMOUNT = Decimal('0.0')
+FEE = Decimal('1')
+MIN_WITHDRAW = Decimal('0.5')
 
 
-async def get_wallet():
-    return await e.objects.scalar(e.Wallet.select(e.Wallet.address))
-
-
-async def gen_invoice_id(owner_id, chat_id, message_id):
-    data = struct.pack('<qqq', owner_id, chat_id, message_id)
-    invoice_id = base64.urlsafe_b64encode(data).decode('ascii')
+async def gen_invoice_id(chat_id, message_id):
+    data = struct.pack('<qi', chat_id, message_id)
+    invoice_id = base64.urlsafe_b64encode(data).decode()
     await e.objects.create(e.Invoice, id=invoice_id, chat_id=chat_id, message_id=message_id)
     return invoice_id
-
-
-async def get_invoice_data(invoice_id):
-    invoice = await e.objects.get(e.Invoice, id=invoice_id)
-    return invoice.chat_id, invoice.message_id
-    # data = base64.urlsafe_b64decode(invoice_id)
-    # return struct.unpack('<qqq', data)
-
-
-async def get_invoice_amount(invoice_id):
-    return await e.objects.scalar(e.Invoice.select(e.Invoice.funded).where(e.Invoice.id == invoice_id))
 
 
 def int_to_ton(value):
@@ -41,15 +25,11 @@ def int_to_ton(value):
 
 
 def ton_to_int(value):
-    return int(value * 10 ** 9)
+    return int(Decimal(value) * 10 ** 9)
 
 
 def now_utc():
     return datetime.now().astimezone(timezone.utc)
-
-
-async def get_wallet_state(address):
-    return await e.objects.scalar(e.Wallet.select(e.Wallet.state).where(e.Wallet.address == address))
 
 
 async def get_user_available_balance(user_id):
@@ -58,8 +38,8 @@ async def get_user_available_balance(user_id):
 
 
 async def new_tip(*, invoice_id, address, amount):
-    chat_id, _ = await get_invoice_data(invoice_id)
-    user_id = await bot.get_chat_owner(chat_id)
+    invoice = await e.objects.get(e.Invoice, id=invoice_id)
+    user_id = await bot.get_chat_owner(invoice.chat_id)
     wallet = await e.objects.get(e.Wallet, address=address)
     async with e.objects.atomic():
         await e.objects.create(
@@ -72,7 +52,7 @@ async def new_tip(*, invoice_id, address, amount):
             e.Invoice.id == invoice_id
         ))
         user, _ = await e.objects.get_or_create(e.User, id=user_id)
-        user.balance += amount * (1 - FEE)
+        user.balance += amount * (1 - FEE / 100)
         await e.objects.update(user)
     try:
         await bot.update_funded(invoice_id)

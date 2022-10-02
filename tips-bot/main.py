@@ -5,6 +5,7 @@ import json
 import logging
 import signal
 import sys
+from decimal import Decimal
 
 import async_timeout
 
@@ -12,6 +13,7 @@ import bot
 import entities as e
 import gateway
 import server
+import ton
 
 CONFIG = 'config.json'
 
@@ -22,12 +24,19 @@ logger = logging.getLogger(__name__)
 async def run(cfg_file):
     try:
         with open(cfg_file) as file:
-            config = json.load(file)
+            config = json.load(file, parse_float=Decimal)
         e.database.init(config['database'])
         if not e.database.get_tables():
             e.database.create_tables([e.Invoice, e.Wallet, e.Transaction, e.User])
         gateway.ENTRYPOINT = config['ton_gateway']
         gateway.TRACKING_ENTRYPOINT = f'http://{config["host"]}:{config["port"]}/tracking'
+        bot.TIPS = list(sorted([
+            (key, ton.ton_to_int(value)) for key, value in config['tips'].items()
+        ], key=lambda x: x[1]))
+        bot.HELP_URL = config.get('help_url', bot.HELP_URL)
+        bot.CUSTOM_TIP = config.get('custom_tip', bot.CUSTOM_TIP)
+        ton.MIN_WITHDRAW = config.get('min_withdraw', ton.MIN_WITHDRAW)
+        ton.FEE = config.get('fee', ton.FEE)
         await bot.run(config['bot_token'])
         await server.run(config['host'], config['port'])
         await gateway.start_tracking()

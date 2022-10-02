@@ -3,5 +3,14 @@
   "port": 8080,
   "database": "tips.db",
   "bot_token": "API_TOKEN_HERE",
-  "ton_gateway": "http://127.0.0.1:7000"
+  "ton_gateway": "http://127.0.0.1:7000",
+  "tips": {
+    "0.5 TON": 0.5,
+    "1 TON": 1,
+    "2 TON": 2
+  },
+  "custom_tip": false,
+  "help_url": "https://telegra.ph/Tips-Me-10-02",
+  "fee": 1,
+  "min_withdraw": 0.5
 }

@@ -12,7 +12,6 @@ from telegram.constants import ParseMode
 from telegram.error import TimedOut
 
 import entities as e
-import gateway
 import lang
 import ton
 
@@ -21,12 +20,10 @@ bot: Optional[Bot] = None
 updates_task: Optional[asyncio.Task] = None
 
 TON_URL = 'ton://transfer/{address}?amount={amount}&text={text}'
-TIPS = [
-    ('1 TON', ton.ton_to_int(1)),
-    ('2 TON', ton.ton_to_int(2)),
-    ('5 TON', ton.ton_to_int(5)),
-    ('10 TON', ton.ton_to_int(10)),
-]
+TON_URL_CUSTOM = 'ton://transfer/{address}?text={text}'
+TIPS = []
+CUSTOM_TIP = False
+HELP_URL = ''
 
 
 async def run(token):
@@ -52,7 +49,6 @@ async def updates_loop():
             updates = await bot.get_updates(offset=offset, timeout=60, allowed_updates=[
                 Update.CHANNEL_POST, Update.MESSAGE, Update.CALLBACK_QUERY
             ])
-            # updates = await bot.get_updates(offset=offset, timeout=60)
             for update in updates:
                 offset = update.update_id + 1
                 if update.channel_post:
@@ -77,8 +73,7 @@ async def get_chat_owner(chat_id):
 
 
 async def handle_channel_post(channel_post):
-    owner_id = await get_chat_owner(channel_post.chat.id)
-    invoice_id = await ton.gen_invoice_id(owner_id, channel_post.chat.id, channel_post.message_id)
+    invoice_id = await ton.gen_invoice_id(channel_post.chat.id, channel_post.message_id)
     entities = json.dumps([entity.to_dict() for entity in channel_post.entities])
     await e.objects.execute(
         e.Invoice.update(message=channel_post.text, entities=entities).where(e.Invoice.id == invoice_id)
@@ -88,11 +83,16 @@ async def handle_channel_post(channel_post):
 
 async def update_funded(invoice_id):
     invoice = await e.objects.get(e.Invoice.select().where(e.Invoice.id == invoice_id))
-    wallet = await ton.get_wallet()
-    markup = InlineKeyboardMarkup([[
+    wallet = await e.objects.scalar(e.Wallet.select(e.Wallet.address))
+    buttons = [
         InlineKeyboardButton(text, TON_URL.format(address=wallet, amount=amount, text=invoice_id))
         for text, amount in TIPS
-    ]])
+    ]
+    if CUSTOM_TIP:
+        buttons += [InlineKeyboardButton(lang.CUSTOM_TIP, TON_URL_CUSTOM.format(address=wallet, text=invoice_id))]
+    if HELP_URL:
+        buttons += [InlineKeyboardButton(lang.HELP_BUTTON, HELP_URL)]
+    markup = InlineKeyboardMarkup([buttons])
     bottom_text = lang.TIPS_TEXT_BOTTOM.format(amount=ton.int_to_ton(invoice.funded))
     await bot.edit_message_text(
         text=f'{invoice.message}\n\n{bottom_text}',
@@ -147,7 +147,7 @@ async def handle_reply(message):
         )
         return
     amount = Decimal(amount)
-    if amount < ton.MIN_AMOUNT:
+    if amount < ton.MIN_WITHDRAW:
         await bot.send_message(
             text=lang.INCORRECT_AMOUNT,
             parse_mode=ParseMode.MARKDOWN,
