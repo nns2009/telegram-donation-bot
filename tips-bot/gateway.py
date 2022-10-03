@@ -41,7 +41,7 @@ async def track_wallet(wallet):
         data = {
             'address': wallet.address,
             'callbackUrl': TRACKING_ENTRYPOINT,
-            'trackingState': json.loads(wallet.state) or 'current',
+            'trackingState': json.loads(wallet.state or '""') or 'current',
         }
         result = await _request(session, url, 'post', data=data)
         logging.info('Tracking wallet %s: %s', wallet.address, result)
