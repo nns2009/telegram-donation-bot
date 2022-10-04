@@ -1,13 +1,12 @@
 import asyncio
 import base64
-import json
 import logging
 import re
 import struct
 from decimal import Decimal
 from typing import Optional
 
-from telegram import Bot, Update, ChatMemberOwner, InlineKeyboardMarkup, InlineKeyboardButton, ForceReply, MessageEntity
+from telegram import Bot, Update, ChatMemberOwner, InlineKeyboardMarkup, InlineKeyboardButton, ForceReply
 from telegram.constants import ParseMode
 from telegram.error import TimedOut
 
@@ -72,17 +71,7 @@ async def get_chat_owner(chat_id):
     return [admin.user.id for admin in admins if isinstance(admin, ChatMemberOwner)][0]
 
 
-async def handle_channel_post(channel_post):
-    invoice_id = await ton.gen_invoice_id(channel_post.chat.id, channel_post.message_id)
-    entities = json.dumps([entity.to_dict() for entity in channel_post.entities])
-    await e.objects.execute(
-        e.Invoice.update(message=channel_post.text, entities=entities).where(e.Invoice.id == invoice_id)
-    )
-    await update_funded(invoice_id)
-
-
-async def update_funded(invoice_id):
-    invoice = await e.objects.get(e.Invoice.select().where(e.Invoice.id == invoice_id))
+async def gen_tips_message(invoice_id, funded):
     wallet = await e.objects.scalar(e.Wallet.select(e.Wallet.address))
     buttons = [
         InlineKeyboardButton(text, TON_URL.format(address=wallet, amount=amount, text=invoice_id))
@@ -93,10 +82,28 @@ async def update_funded(invoice_id):
     if HELP_URL:
         buttons += [InlineKeyboardButton(lang.HELP_BUTTON, HELP_URL)]
     markup = InlineKeyboardMarkup([buttons])
-    bottom_text = lang.TIPS_TEXT_BOTTOM.format(amount=ton.int_to_ton(invoice.funded))
+    text = lang.TIPS_TEXT_BOTTOM.format(amount=ton.int_to_ton(funded))
+    return text, markup
+
+
+async def handle_channel_post(channel_post):
+    if channel_post.reply_to_message:
+        return
+    invoice_id = await ton.gen_invoice_id(channel_post.chat.id, channel_post.message_id)
+    text, markup = await gen_tips_message(invoice_id, 0)
+    tips_msg = await bot.send_message(
+        channel_post.chat.id, text=text,
+        parse_mode=ParseMode.MARKDOWN,
+        reply_markup=markup,
+    )
+    await e.objects.execute(e.Invoice.update(message_id=tips_msg.id).where(e.Invoice.id == invoice_id))
+
+
+async def update_funded(invoice_id):
+    invoice = await e.objects.get(e.Invoice, id=invoice_id)
+    text, markup = await gen_tips_message(invoice_id, invoice.funded)
     await bot.edit_message_text(
-        text=f'{invoice.message}\n\n{bottom_text}',
-        entities=MessageEntity.de_list(json.loads(invoice.entities), bot),
+        text=text,
         parse_mode=ParseMode.MARKDOWN,
         chat_id=invoice.chat_id,
         message_id=invoice.message_id,
